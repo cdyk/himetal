@@ -10,7 +10,11 @@ xcuserdata/
 *.xccheckout
 
 ## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
-build/
+*.xcworkspace
+*.xcodeproj
+.DS_Store
+Build/Debug
+Build/obj
 DerivedData/
 *.moved-aside
 *.pbxuser
