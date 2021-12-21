@@ -4,13 +4,19 @@ solution "HiMetal"
 project "HiMetal"
 	kind "WindowedApp"
 	language "C++"
+	cppdialect "c++17"
 	targetdir "%{cfg.buildcfg}"
 
 	files {
 		"premake5.lua",
         "../source/**.h",
 		"../source/**.m",
+		"../source/**.cpp",
         "../data/**.metal"
+	}
+
+	sysincludedirs {
+		"../libs/metal-cpp"
 	}
 
 	links {
