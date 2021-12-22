@@ -32,20 +32,11 @@ struct CppRenderer {
         device->retain();
         queue = device->newCommandQueue();
 
-        MTL::Library* lib = device->newDefaultLibrary();
-        assert(lib);
-
-        MTL::Function* vs = lib->newFunction(NS::MakeConstantString("myVertexShader"));
-        assert(vs);
-
-        MTL::Function* fs = lib->newFunction(NS::MakeConstantString("myFragmentShader"));
-        assert(fs);
-
-        
         MTL::DepthStencilDescriptor* depthDesc = MTL::DepthStencilDescriptor::alloc()->init();
         depthDesc->setDepthCompareFunction(MTL::CompareFunctionLess);
         depthDesc->setDepthWriteEnabled(YES);
         depthState = device->newDepthStencilState(depthDesc);
+        depthDesc->release();
 
         MTL::VertexDescriptor* vertDesc = MTL::VertexDescriptor::alloc()->init();
         vertDesc->attributes()->object(0)->setFormat(MTL::VertexFormatFloat3);
@@ -57,7 +48,17 @@ struct CppRenderer {
         vertDesc->layouts()->object(0)->setStride(sizeof(struct Vertex));
         vertDesc->layouts()->object(0)->setStepRate(1);
         vertDesc->layouts()->object(0)->setStepFunction(MTL::VertexStepFunctionPerVertex);
-        
+
+        MTL::Library* lib = device->newDefaultLibrary();
+        assert(lib);
+
+        MTL::Function* vs = lib->newFunction(NS::MakeConstantString("myVertexShader"));
+        assert(vs);
+
+        MTL::Function* fs = lib->newFunction(NS::MakeConstantString("myFragmentShader"));
+        assert(fs);
+        lib->release();
+
         MTL::RenderPipelineDescriptor* pipeDesc = MTL::RenderPipelineDescriptor::alloc()->init();
         pipeDesc->setSampleCount(1);
         pipeDesc->setVertexFunction(vs);
@@ -66,9 +67,15 @@ struct CppRenderer {
         pipeDesc->colorAttachments()->object(0)->setPixelFormat(pixelFormat);
         pipeDesc->setDepthAttachmentPixelFormat(depthStencilPixelFormat);
         pipeDesc->setStencilAttachmentPixelFormat(depthStencilPixelFormat);
-        
+
+        vertDesc->release();
+        fs->release();
+        vs->release();
+
         NS::Error* error = nullptr;
         pipeState = device->newRenderPipelineState(pipeDesc, &error);
+        pipeDesc->release();
+
         if(!pipeState) {
             fprintf(stderr, "Failed to create pipe state: %s\n", error->description()->utf8String());
             exit(0);
@@ -79,8 +86,9 @@ struct CppRenderer {
 
     ~CppRenderer()
     {
+        depthState->release();
+        pipeState->release();
         device->release();
-        device = nullptr;
     }
     
     void render(MTL::RenderPassDescriptor* passDesc, MTL::Drawable* drawable)
@@ -91,6 +99,7 @@ struct CppRenderer {
         MTL::RenderCommandEncoder* enc = cmdBuf->renderCommandEncoder(passDesc);
 
         enc->setRenderPipelineState(pipeState);
+        enc->setDepthStencilState(depthState);
         enc->setViewport(MTL::Viewport{0.0, 0.0, w, h, 0.0, 1.0});
         enc->setVertexBuffer(vBuf, 0, 0);
         enc->setVertexBytes(I_4x4, sizeof(I_4x4), 1);
