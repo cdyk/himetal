@@ -12,7 +12,6 @@ namespace {
         NS::AutoreleasePool* pool = nullptr;
         ScopedAutoReleasePool() : pool(NS::AutoreleasePool::alloc()->init()) {}
         ~ScopedAutoReleasePool() { pool->drain(); }
-        template<typename T> T* add(T* obj) { pool->addObject(obj); return obj; }
     };
 
     struct Vertex {
@@ -46,13 +45,12 @@ struct CppRenderer {
 
         queue = device->newCommandQueue();
 
-        MTL::DepthStencilDescriptor* depthDesc = pool.add(MTL::DepthStencilDescriptor::alloc()->init());
+        MTL::DepthStencilDescriptor* depthDesc = MTL::DepthStencilDescriptor::alloc()->init()->autorelease();
         depthDesc->setDepthCompareFunction(MTL::CompareFunctionLess);
         depthDesc->setDepthWriteEnabled(YES);
-
         depthState = device->newDepthStencilState(depthDesc);
 
-        MTL::VertexDescriptor* vertDesc = MTL::VertexDescriptor::alloc()->init();
+        MTL::VertexDescriptor* vertDesc = MTL::VertexDescriptor::alloc()->init()->autorelease();
         vertDesc->attributes()->object(0)->setFormat(MTL::VertexFormatFloat3);
         vertDesc->attributes()->object(0)->setOffset(0);
         vertDesc->attributes()->object(0)->setBufferIndex(0);
@@ -63,25 +61,25 @@ struct CppRenderer {
         vertDesc->layouts()->object(0)->setStepRate(1);
         vertDesc->layouts()->object(0)->setStepFunction(MTL::VertexStepFunctionPerVertex);
 
-        MTL::Library* lib = pool.add(device->newDefaultLibrary());
+        MTL::Library* lib = device->newDefaultLibrary()->autorelease();
         if(!lib) {
             fprintf(stderr, "Failed to create library\n");
             return false;
         }
 
-        MTL::Function* vs = pool.add(lib->newFunction(NS::MakeConstantString("myVertexShader")));
+        MTL::Function* vs = lib->newFunction(NS::MakeConstantString("myVertexShader"))->autorelease();
         if(!vs) {
             fprintf(stderr, "Failed to create vertex shader func\n");
             return false;
         }
 
-        MTL::Function* fs = pool.add(lib->newFunction(NS::MakeConstantString("myFragmentShader")));
+        MTL::Function* fs = lib->newFunction(NS::MakeConstantString("myFragmentShader"))->autorelease();
         if(!vs) {
             fprintf(stderr, "Failed to create fragment shader func\n");
             return false;
         }
 
-        MTL::RenderPipelineDescriptor* pipeDesc = pool.add( MTL::RenderPipelineDescriptor::alloc()->init());
+        MTL::RenderPipelineDescriptor* pipeDesc = MTL::RenderPipelineDescriptor::alloc()->init()->autorelease();
         pipeDesc->setSampleCount(1);
         pipeDesc->setVertexFunction(vs);
         pipeDesc->setFragmentFunction(fs);

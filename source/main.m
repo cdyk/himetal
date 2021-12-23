@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 
         id view = [[[MyMTKView alloc] initWithFrame:win.contentLayoutRect
                                              device:MTLCreateSystemDefaultDevice()] autorelease];
-        [win setTitle:@"Hi Metal"];
+        [win setTitle:@"Hi metal-cpp"];
         [win setContentView:view];
         [win setIsVisible:YES];
         [win autorelease];
