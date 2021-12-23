@@ -1,42 +1,86 @@
 #import <MetalKit/MetalKit.h>
+#import <Cocoa/Cocoa.h>
+#import "cpprenderer.h"
 
-#include <Cocoa/Cocoa.h>
-#include "renderer.h"
-
-@interface MyWindow : NSWindow {
-}
+@interface MyRenderDelegate : NSObject<MTKViewDelegate>
+- (instancetype)initWithMetalKitView:(MTKView *)mtkView;
 @end
 
-@implementation MyWindow
-- (instancetype)init {
-    
-    self = [super initWithContentRect:NSMakeRect(10, 10, 500, 300)
-                            styleMask:NSWindowStyleMaskTitled |
-                                      NSWindowStyleMaskClosable |
-                                      NSWindowStyleMaskTitled |
-                                      NSWindowStyleMaskResizable |
-                                      NSWindowStyleMaskMiniaturizable
-                              backing:NSBackingStoreBuffered
-                                defer:NO];
+@implementation MyRenderDelegate {
+    CppRenderer* _mCppRenderer;
+}
+- (instancetype)initWithMetalKitView:(MTKView *)mtkView
+{
+    self = [super init];
     if(self) {
-        id view = [[MTKView alloc] initWithFrame:self.contentLayoutRect
-                                          device:MTLCreateSystemDefaultDevice()];
-
-        MyRenderer* _renderer = [[MyRenderer alloc] initWithMetalKitView:view];
-
-        [view setDelegate:_renderer];
-        [self setTitle:@"Hi Metal"];
-        [self setContentView:view];
-        [self setIsVisible:YES];
+        mtkView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+        mtkView.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        mtkView.enableSetNeedsDisplay = YES;
+        mtkView.clearColor = MTLClearColorMake(0.5, 0.5, 0.5, 0.0);
+        _mCppRenderer = CppRenderer_create(mtkView.device,
+                                           mtkView.colorPixelFormat,
+                                           mtkView.depthStencilPixelFormat);
+        CppRenderer_resize(_mCppRenderer,
+                           mtkView.drawableSize.width,
+                           mtkView.drawableSize.height);
     }
     return self;
 }
+- (void)drawInMTKView:(MTKView *)view
+{
+    CppRenderer_render(_mCppRenderer,
+                       view.currentRenderPassDescriptor,
+                       view.currentDrawable);
+}
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
+{
+    CppRenderer_resize(_mCppRenderer,
+                       size.width,
+                       size.height);
+}
+@end
+
+@interface MyMTKView : MTKView {
+}
+@end
+
+@implementation MyMTKView
+
+MyRenderDelegate* _mRenderer;
+
+- (instancetype)initWithFrame:(CGRect)frameRect device:(nullable id<MTLDevice>)device {
+    self = [super initWithFrame:frameRect device:device];
+    if(self) {
+        _mRenderer = [[MyRenderDelegate alloc] initWithMetalKitView:self];
+        [self setDelegate:_mRenderer];
+    }
+    return self;
+}
+- (void)mouseDown:(NSEvent *)event {
+    NSLog(@"Mousedown");
+}
+
 @end
 
 int main(int argc, char** argv)
 {
     [NSApplication sharedApplication];
-    [[[[MyWindow alloc] init] autorelease] makeMainWindow];
+    NSWindow* win = [[NSWindow alloc] initWithContentRect:NSMakeRect(10, 10, 500, 300)
+                                                styleMask:NSWindowStyleMaskTitled |
+                                                          NSWindowStyleMaskClosable |
+                                                          NSWindowStyleMaskTitled |
+                                                          NSWindowStyleMaskResizable |
+                                                          NSWindowStyleMaskMiniaturizable
+                                                  backing:NSBackingStoreBuffered
+                                                    defer:NO];
+
+    id view = [[MyMTKView alloc] initWithFrame:win.contentLayoutRect
+                                        device:MTLCreateSystemDefaultDevice()];
+    [win setTitle:@"Hi Metal"];
+    [win setContentView:view];
+    [win setIsVisible:YES];
+    [win autorelease];
+    [win makeMainWindow];
     [NSApp run];
 	return 0;
 }
