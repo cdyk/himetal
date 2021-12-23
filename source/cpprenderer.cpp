@@ -7,6 +7,14 @@
 
 namespace {
 
+    struct ScopedAutoReleasePool
+    {
+        NS::AutoreleasePool* pool = nullptr;
+        ScopedAutoReleasePool() : pool(NS::AutoreleasePool::alloc()->init()) {}
+        ~ScopedAutoReleasePool() { pool->drain(); }
+        template<typename T> T* add(T* obj) { pool->addObject(obj); return obj; }
+    };
+
     struct Vertex {
         float x, y, z;
         uint8_t r, g, b, a;
@@ -26,17 +34,23 @@ namespace {
 }
 
 struct CppRenderer {
-    CppRenderer(MTL::Device* device, MTL::PixelFormat pixelFormat, MTL::PixelFormat depthStencilPixelFormat)
-    : device(device)
+
+    bool init(MTL::Device* device,
+              MTL::PixelFormat pixelFormat,
+              MTL::PixelFormat depthStencilPixelFormat)
     {
+        ScopedAutoReleasePool pool;
+        
+        this->device = device;
         device->retain();
+
         queue = device->newCommandQueue();
 
-        MTL::DepthStencilDescriptor* depthDesc = MTL::DepthStencilDescriptor::alloc()->init();
+        MTL::DepthStencilDescriptor* depthDesc = pool.add(MTL::DepthStencilDescriptor::alloc()->init());
         depthDesc->setDepthCompareFunction(MTL::CompareFunctionLess);
         depthDesc->setDepthWriteEnabled(YES);
+
         depthState = device->newDepthStencilState(depthDesc);
-        depthDesc->release();
 
         MTL::VertexDescriptor* vertDesc = MTL::VertexDescriptor::alloc()->init();
         vertDesc->attributes()->object(0)->setFormat(MTL::VertexFormatFloat3);
@@ -49,17 +63,25 @@ struct CppRenderer {
         vertDesc->layouts()->object(0)->setStepRate(1);
         vertDesc->layouts()->object(0)->setStepFunction(MTL::VertexStepFunctionPerVertex);
 
-        MTL::Library* lib = device->newDefaultLibrary();
-        assert(lib);
+        MTL::Library* lib = pool.add(device->newDefaultLibrary());
+        if(!lib) {
+            fprintf(stderr, "Failed to create library\n");
+            return false;
+        }
 
-        MTL::Function* vs = lib->newFunction(NS::MakeConstantString("myVertexShader"));
-        assert(vs);
+        MTL::Function* vs = pool.add(lib->newFunction(NS::MakeConstantString("myVertexShader")));
+        if(!vs) {
+            fprintf(stderr, "Failed to create vertex shader func\n");
+            return false;
+        }
 
-        MTL::Function* fs = lib->newFunction(NS::MakeConstantString("myFragmentShader"));
-        assert(fs);
-        lib->release();
+        MTL::Function* fs = pool.add(lib->newFunction(NS::MakeConstantString("myFragmentShader")));
+        if(!vs) {
+            fprintf(stderr, "Failed to create fragment shader func\n");
+            return false;
+        }
 
-        MTL::RenderPipelineDescriptor* pipeDesc = MTL::RenderPipelineDescriptor::alloc()->init();
+        MTL::RenderPipelineDescriptor* pipeDesc = pool.add( MTL::RenderPipelineDescriptor::alloc()->init());
         pipeDesc->setSampleCount(1);
         pipeDesc->setVertexFunction(vs);
         pipeDesc->setFragmentFunction(fs);
@@ -68,27 +90,24 @@ struct CppRenderer {
         pipeDesc->setDepthAttachmentPixelFormat(depthStencilPixelFormat);
         pipeDesc->setStencilAttachmentPixelFormat(depthStencilPixelFormat);
 
-        vertDesc->release();
-        fs->release();
-        vs->release();
-
         NS::Error* error = nullptr;
         pipeState = device->newRenderPipelineState(pipeDesc, &error);
-        pipeDesc->release();
 
         if(!pipeState) {
             fprintf(stderr, "Failed to create pipe state: %s\n", error->description()->utf8String());
-            exit(0);
+            return false;
         }
 
         vBuf = device->newBuffer(vertices, sizeof(vertices), 0);
+
+        return true;
     }
 
     ~CppRenderer()
     {
-        depthState->release();
-        pipeState->release();
-        device->release();
+        if(depthState) depthState->release();
+        if(pipeState) pipeState->release();
+        if(device) device->release();
     }
     
     void render(MTL::RenderPassDescriptor* passDesc, MTL::Drawable* drawable)
@@ -126,26 +145,35 @@ struct CppRenderer {
 CppRenderer* CppRenderer_create(void* device, uintptr_t pixelFormat, uintptr_t depthStencilFormat)
 {
     fprintf(stderr, "create\n");
-    CppRenderer* renderer = new CppRenderer(reinterpret_cast<MTL::Device*>(device),
-                                            static_cast<MTL::PixelFormat>(pixelFormat),
-                                            static_cast<MTL::PixelFormat>(depthStencilFormat));
-    return renderer;
+    CppRenderer* renderer = new CppRenderer;
+    
+    if(renderer->init(reinterpret_cast<MTL::Device*>(device),
+                      static_cast<MTL::PixelFormat>(pixelFormat),
+                      static_cast<MTL::PixelFormat>(depthStencilFormat)))
+    {
+        return renderer;
+    }
+    delete renderer;
+    return nullptr;
 }
 
 void CppRenderer_resize(CppRenderer* renderer, float w, float h)
 {
+    if(!renderer) return;
     renderer->w = w;
     renderer->h = h;
 }
 
 void CppRenderer_render(CppRenderer* renderer, void* passDesc, void* drawable)
 {
+    if(!renderer) return;
     renderer->render(reinterpret_cast<MTL::RenderPassDescriptor*>(passDesc),
                      reinterpret_cast<MTL::Drawable*>(drawable));
 }
 
 void CppRenderer_destroy(CppRenderer* renderer)
 {
+    if(!renderer) return;
     fprintf(stderr, "destroy\n");
     delete renderer;
 }
